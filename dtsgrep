@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+import os
+import sys
+import re
+from collections import deque
+
+def find_dts_files(main_dts_path):
+    """
+    递归查找所有关联的dts/dtsi文件
+    返回文件绝对路径列表
+    """
+    # 获取入口文件绝对路径和基础目录
+    main_dts_path = os.path.abspath(main_dts_path)
+    base_dir = os.path.dirname(main_dts_path)
+    
+    processed = set()       # 已处理文件集合
+    todo = deque([(main_dts_path, base_dir)])  # 待处理队列(文件路径, 搜索基准目录)
+    all_files = []          # 所有相关文件列表
+    
+    while todo:
+        file_path, current_base = todo.popleft()
+        
+        # 跳过已处理文件
+        if file_path in processed:
+            continue
+        processed.add(file_path)
+        all_files.append(file_path)
+        
+        try:
+            with open(file_path, 'r') as f:
+                for line in f:
+                    # 检查包含指令（支持#include和/include/两种语法）
+                    include_match = re.search(
+                        r'^\s*(?:#include|/include/)\s*["<]([^">]+)[">]', 
+                        line
+                    )
+                    if not include_match:
+                        continue
+                    
+                    # 处理包含的相对路径
+                    included = include_match.group(1)
+                    # 路径拼接策略：
+                    # 1. 优先相对于当前文件的目录
+                    # 2. 尝试相对于主文件目录（用于旧版dtc）
+                    search_paths = [
+                        os.path.join(os.path.dirname(file_path), included),
+                        os.path.join(base_dir, included)
+                    ]
+                    
+                    # 尝试定位文件
+                    found = False
+                    for test_path in search_paths:
+                        test_path = os.path.normpath(test_path)
+                        if os.path.exists(test_path):
+                            new_base = os.path.dirname(test_path)
+                            todo.append((test_path, new_base))
+                            found = True
+                            break
+                    
+                    if not found:
+                        print(f"警告: 包含文件未找到 - {included} @ {file_path}",
+                              file=sys.stderr)
+        except IOError as e:
+            print(f"错误: 无法读取文件 {file_path} - {str(e)}", file=sys.stderr)
+    
+    return all_files
+
+def search_in_dts(files, pattern):
+    """在文件列表中搜索指定模式"""
+    results = []
+    compiled_pattern = re.compile(pattern)
+    
+    for file_path in files:
+        try:
+            with open(file_path, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    if compiled_pattern.search(line):
+                        # 移除行尾换行符
+                        clean_line = line.rstrip('\n\r')
+                        results.append({
+                            'file': file_path,
+                            'line': line_num,
+                            'content': clean_line
+                        })
+        except IOError as e:
+            print(f"错误: 读取文件失败 {file_path} - {str(e)}", file=sys.stderr)
+    
+    return results
+
+def main():
+    if len(sys.argv) != 3:
+        print("用法: dtsgrep <dts文件> <搜索模式>")
+        print("示例: dtsgrep myboard.dts 'gpio-controller'")
+        sys.exit(1)
+    
+    main_dts = sys.argv[1]
+    search_pattern = sys.argv[2]
+    
+    if not os.path.exists(main_dts):
+        print(f"错误: 主文件未找到 - {main_dts}", file=sys.stderr)
+        sys.exit(2)
+    
+    # 步骤1: 查找所有相关文件
+    try:
+        dts_files = find_dts_files(main_dts)
+    except Exception as e:
+        print(f"文件收集失败: {str(e)}", file=sys.stderr)
+        sys.exit(3)
+    
+    # 步骤2: 在所有文件中搜索模式
+    search_results = search_in_dts(dts_files, search_pattern)
+    
+    # 步骤3: 打印结果
+    if not search_results:
+        print(f"未找到匹配模式 '{search_pattern}'")
+        sys.exit(0)
+    
+    print(f"在{len(search_results)}处找到'{search_pattern}':")
+    for i, res in enumerate(search_results, 1):
+        rel_path = os.path.relpath(res['file'])
+        print(f"\n[{i}] {rel_path}:{res['line']}")
+        print(f"    {res['content']}")
+    
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
