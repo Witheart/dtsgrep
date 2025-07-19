@@ -1,8 +1,8 @@
 # dtsgrep - 设备树递归搜索工具
 
-!https://img.shields.io/badge/Python-3.6%2B-blue
-!https://img.shields.io/badge/License-MIT-green
-!https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-lightgrey
+![](https://img.shields.io/badge/Python-3.6%2B-blue)
+![](https://img.shields.io/badge/License-MIT-green)
+![](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-lightgrey)
 
 `dtsgrep` 是一个强大的命令行工具，专为设备树开发者设计，用于在复杂设备树结构中递归搜索指定字段。它可以解析 `.dts` 和 `.dtsi` 文件中的包含关系，并在所有相关文件中精确查找匹配内容，提供详细的定位信息。
 
